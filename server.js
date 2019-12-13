@@ -10,8 +10,7 @@ const config  = YAML.parse(
  *  RAW dispatcher to console. Useful for debugging.
  */
 const consoleDispatch = function(data) {
-  let message = data.toString('utf8');
-  console.log({message});
+  console.log({data});
 };
 
 const dispatch = function(data) {
@@ -95,14 +94,12 @@ const parseRequest = function(data) {
   let account = id.substring(id.indexOf('#'));
   let prefix = id.substring(id.indexOf('L'), id.indexOf('#'));
   let receiver = id.indexOf('R') != -1?id.substring(id.indexOf('R'), id.indexOf('L')):'';
-  let response = Buffer.from('ABC');
-  return {chunk, msg, crc, size, type, id, account, prefix, receiver, response};
-};
-
-const response = function(data) {
-  let request = {};
-  request = parseRequest(data);
-  console.log(request);
+  let sequence = id.indexOf('R') != -1?id.substring(0, id.indexOf('R')):id.substring(0, id.indexOf('L'));
+  let responseMsg = `"ACK"${sequence}${receiver}${prefix}${account}[]`;
+  let responseCrc = crc16str(responseMsg);
+  let responseSize = msgSize(responseMsg);
+  let response = `\n${responseCrc}${responseSize}${responseMsg}\r`;
+  return {chunk, msg, crc, size, type, id, account, prefix, receiver, sequence, response};
 };
 
 let server = net.createServer(function(socket) {
@@ -110,9 +107,10 @@ let server = net.createServer(function(socket) {
     console.error(err)
   });
   socket.on('data', function(data) {
-    dispatch(data);
-    response(data);
-    socket.end()
+    let request = parseRequest(data);
+    dispatch(request);
+    let response = request.response;
+    let status = socket.write(response);
   });
 });
 
