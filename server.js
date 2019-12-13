@@ -95,7 +95,7 @@ const parseRequest = function(data) {
   let account = id.substring(id.indexOf('#'));
   let prefix = id.substring(id.indexOf('L'), id.indexOf('#'));
   let receiver = id.indexOf('R') != -1?id.substring(id.indexOf('R'), id.indexOf('L')):'';
-  let response = Buffer.from('0');
+  let response = Buffer.from('ABC');
   return {chunk, msg, crc, size, type, id, account, prefix, receiver, response};
 };
 
