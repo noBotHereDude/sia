@@ -2,6 +2,12 @@ const FS      = require('fs');
 const YAML    = require('yaml');
 const net     = require('net');
 
+const codes   = YAML.parse(
+  FS.readFileSync('codes.yml', 'utf8')
+).codes;
+
+console.log({codes});
+
 const config  = YAML.parse(
   FS.readFileSync('config.yml', 'utf8')
 );
@@ -9,7 +15,7 @@ const config  = YAML.parse(
 /*
  *  RAW dispatcher to console. Useful for debugging.
  */
-const consoleDispatch = function(data) {
+const consoleDispatch = function(data, format = 'raw') {
   console.log({data});
 };
 
@@ -18,7 +24,7 @@ const dispatch = function(data) {
     config.dispatcher.forEach(bot => {
       switch(bot.type) {
         case 'console':
-          consoleDispatch(data);
+          consoleDispatch(data, bot.format);
           break;
         default:
           console.info(`Unknown dispatcher ${bot.type}.`);
@@ -95,11 +101,15 @@ const parseRequest = function(data) {
   let prefix = id.substring(id.indexOf('L'), id.indexOf('#'));
   let receiver = id.indexOf('R') != -1?id.substring(id.indexOf('R'), id.indexOf('L')):'';
   let sequence = id.indexOf('R') != -1?id.substring(0, id.indexOf('R')):id.substring(0, id.indexOf('L'));
+
+  let block = msg.substring(msg.indexOf('[') + 1, msg.indexOf(']'));
+
   let responseMsg = `"ACK"${sequence}${receiver}${prefix}${account}[]`;
   let responseCrc = crc16str(responseMsg);
   let responseSize = msgSize(responseMsg);
   let response = `\n${responseCrc}${responseSize}${responseMsg}\r`;
-  return {chunk, msg, crc, size, type, id, account, prefix, receiver, sequence, response};
+
+  return {chunk, msg, crc, size, type, id, account, prefix, receiver, sequence, block, response};
 };
 
 let server = net.createServer(function(socket) {
