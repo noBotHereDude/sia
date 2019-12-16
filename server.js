@@ -1,21 +1,51 @@
 const FS      = require('fs');
 const YAML    = require('yaml');
 const net     = require('net');
+const moment  = require('moment-timezone');
 
 const codes   = YAML.parse(
   FS.readFileSync('codes.yml', 'utf8')
 ).codes;
 
-console.log({codes});
-
 const config  = YAML.parse(
   FS.readFileSync('config.yml', 'utf8')
 );
+
+if(config.server.diff.negative > 0) {
+  config.server.diff.negative = -20;
+}
+if(config.server.diff.positive < 0) {
+  config.server.diff.positive = 40;
+}
 
 /*
  *  RAW dispatcher to console. Useful for debugging.
  */
 const consoleDispatch = function(data, format = 'raw') {
+  if(format != 'raw') {
+    let needle = codes.filter((item) => item.code == data.sia.code);
+    if(needle.length == 1) {
+      data.sia.shortDesc = needle[0].shortDescription;
+      data.sia.longDesc = needle[0].longDescription;
+      data.sia.addressType = needle[0].address;
+    }
+  }
+  console.log({data});
+};
+
+const mssqlDispatch = function(data, format = 'raw') {
+  if(format != 'raw') {
+    let needle = codes.filter((item) => item.code == data.sia.code);
+    if(needle.length == 1) {
+      data.sia.shortDesc = needle[0].shortDescription;
+      data.sia.longDesc = needle[0].longDescription;
+      data.sia.addressType = needle[0].address;
+    } else {
+      data.sia.shortDesc = null;
+      data.sia.longDesc = null;
+      data.sia.addressType = null;
+    }
+  }
   console.log({data});
 };
 
@@ -23,6 +53,9 @@ const dispatch = function(data) {
   if(config.dispatcher !== undefined) {
     config.dispatcher.forEach(bot => {
       switch(bot.type) {
+        case 'mssql':
+          mssqlDispatch(data, bot.format);
+          break;
         case 'console':
           consoleDispatch(data, bot.format);
           break;
@@ -90,6 +123,8 @@ const msgSize = function(str) {
 };
 
 const parseRequest = function(data) {
+  let csrTimestamp = moment.tz(new Date(), 'UTC');
+  let peTimestamp;
   let chunk = data.toString('utf8');
   let msg = chunk.substring(chunk.indexOf('"'));
   msg = msg.substring(0, msg.lastIndexOf("\r"));
@@ -97,19 +132,59 @@ const parseRequest = function(data) {
   let size = msgSize(msg);
   let type = msg.substring(1, msg.lastIndexOf('"'));
   let id = msg.substring(msg.lastIndexOf('"') + 1, msg.lastIndexOf('['));
+  let msgTimestamp = msg.substring(msg.lastIndexOf(']') + 1);
+  if(msgTimestamp != '') {
+    peTimestamp = moment.tz(msgTimestamp, '_HH:mm:ss,MM-DD-YYYY', 'UTC');
+  } else {
+    peTimestamp = moment(csrTimestamp);
+  }
+  let timestamp = {
+    pe: parseInt(peTimestamp.format('X')),
+    csr: parseInt(csrTimestamp.format('X')),
+    diff: parseInt(peTimestamp.format('X')) - parseInt(csrTimestamp.format('X'))
+  }
+  let servertimestamp = moment().format('X');
   let account = id.substring(id.indexOf('#'));
   let prefix = id.substring(id.indexOf('L'), id.indexOf('#'));
   let receiver = id.indexOf('R') != -1?id.substring(id.indexOf('R'), id.indexOf('L')):'';
   let sequence = id.indexOf('R') != -1?id.substring(0, id.indexOf('R')):id.substring(0, id.indexOf('L'));
 
   let block = msg.substring(msg.indexOf('[') + 1, msg.indexOf(']'));
+  let sia = {
+    data: null,
+    code: null,
+    address: null,
+    shortDesc: null,
+    longDesc: null,
+    addressType: null
+  };
 
-  let responseMsg = `"ACK"${sequence}${receiver}${prefix}${account}[]`;
+  let responseMsg;
+  if(timestamp.diff < config.server.diff.negative || timestamp.diff > config.server.diff.positive) {
+    let timestamp = csrTimestamp.format('_HH:mm:ss,MM-DD-YYYY');
+    responseMsg = `"NAK"0000R0L0[]${timestamp}`;
+  } else {
+    responseMsg = `"ACK"${sequence}${receiver}${prefix}${account}[]`;
+  }
+  if(receiver == '') {
+    receiver = null;
+  }
+  if(block == '') {
+    block = null;
+  } else {
+    sia.data = block.substring(block.indexOf('|') + 1);
+    let temp = sia.data.substring(sia.data.indexOf('N') + 1);
+    if(temp.substring(0, 2) == 'ri') {
+      temp = temp.substring(temp.indexOf('/') + 1)
+    }
+    sia.code = temp.substring(0, 2);
+    sia.address = temp.substring(2);
+  }
   let responseCrc = crc16str(responseMsg);
   let responseSize = msgSize(responseMsg);
   let response = `\n${responseCrc}${responseSize}${responseMsg}\r`;
 
-  return {chunk, msg, crc, size, type, id, account, prefix, receiver, sequence, block, response};
+  return {chunk, msg, crc, size, type, id, account, prefix, receiver, sequence, block, sia, timestamp, response};
 };
 
 let server = net.createServer(function(socket) {

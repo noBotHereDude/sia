@@ -1,5 +1,12 @@
 server:
   port: 65000
+  diff:
+    negative: -20
+    positive: 40
 dispatcher:
   -
     type: 'console'
+    format: 'human'
+  -
+    type: 'mssql'
+    format: 'human'
