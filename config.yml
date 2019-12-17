@@ -10,3 +10,7 @@ dispatcher:
   -
     type: 'mssql'
     format: 'human'
+    user: 'seg'
+    password: 'Dnl123'
+    database: 'Bb_datos'
+    server: '190.13.132.109'

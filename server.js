@@ -2,6 +2,7 @@ const FS      = require('fs');
 const YAML    = require('yaml');
 const net     = require('net');
 const moment  = require('moment-timezone');
+const sql     = require('mssql');
 
 const codes   = YAML.parse(
   FS.readFileSync('codes.yml', 'utf8')
@@ -21,8 +22,8 @@ if(config.server.diff.positive < 0) {
 /*
  *  RAW dispatcher to console. Useful for debugging.
  */
-const consoleDispatch = function(data, format = 'raw') {
-  if(format != 'raw') {
+const consoleDispatch = function(data, bot) {
+  if(bot.format !== undefined && bot.format != 'raw' && data.type == 'SIA-DCS') {
     let needle = codes.filter((item) => item.code == data.sia.code);
     if(needle.length == 1) {
       data.sia.shortDesc = needle[0].shortDescription;
@@ -33,20 +34,43 @@ const consoleDispatch = function(data, format = 'raw') {
   console.log({data});
 };
 
-const mssqlDispatch = function(data, format = 'raw') {
-  if(format != 'raw') {
+const mssqlDispatch = function(data, bot) {
+  if(bot.format !== undefined && bot.format != 'raw') {
     let needle = codes.filter((item) => item.code == data.sia.code);
     if(needle.length == 1) {
       data.sia.shortDesc = needle[0].shortDescription;
       data.sia.longDesc = needle[0].longDescription;
       data.sia.addressType = needle[0].address;
-    } else {
-      data.sia.shortDesc = null;
-      data.sia.longDesc = null;
-      data.sia.addressType = null;
     }
   }
-  console.log({data});
+  let database = {
+    user: bot.user,
+    password: bot.password,
+    server: bot.server,
+    database: bot.database
+  };
+  sql.connect(database)
+  .then(pool => {
+    return pool.request()
+           .input('Code', data.sia.code)
+           .input('Title', data.sia.shortDesc)
+           .input('Description', data.sia.longDesc)
+           .input('AddressType', data.sia.addressType)
+           .input('Account', data.account)
+           .input('Type', data.type)
+           .input('Prefix', data.prefix)
+           .input('Receiver', data.receiver)
+           .input('Address', data.sia.address)
+           .input('Timestamp', data.timestamp.pe)
+           .execute('registerSIAevent');
+  }).then(result => {
+    if(result.returnValue != 0) {
+      console.log('Execution of stored procedure has not been successful. Check "registerSIAevent" stored procedure.');
+    }
+  }).catch(err => {
+    console.error(err);
+  });
+
 };
 
 const dispatch = function(data) {
@@ -54,10 +78,10 @@ const dispatch = function(data) {
     config.dispatcher.forEach(bot => {
       switch(bot.type) {
         case 'mssql':
-          mssqlDispatch(data, bot.format);
+          mssqlDispatch(data, bot);
           break;
         case 'console':
-          consoleDispatch(data, bot.format);
+          consoleDispatch(data, bot);
           break;
         default:
           console.info(`Unknown dispatcher ${bot.type}.`);

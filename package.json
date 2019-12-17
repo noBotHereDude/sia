@@ -12,6 +12,7 @@
   "dependencies": {
     "crc": "^3.8.0",
     "moment-timezone": "^0.5.27",
+    "mssql": "^6.0.1",
     "yaml": "^1.7.2"
   }
 }
