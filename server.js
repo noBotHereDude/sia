@@ -3,6 +3,7 @@ const YAML    = require('yaml');
 const net     = require('net');
 const moment  = require('moment-timezone');
 const sql     = require('mssql');
+const yargs   = require('yargs');
 
 const codes   = YAML.parse(
   FS.readFileSync('codes.yml', 'utf8')
@@ -12,11 +13,43 @@ const config  = YAML.parse(
   FS.readFileSync('config.yml', 'utf8')
 );
 
+/*
+ *  Specify default range to timestamps
+ */
 if(config.server.diff.negative > 0) {
   config.server.diff.negative = -20;
 }
 if(config.server.diff.positive < 0) {
   config.server.diff.positive = 40;
+}
+
+/*
+ *  Parse arguments like port and debug.
+ */
+const argv = yargs
+    .option('port', {
+        alias: 'p',
+        description: 'Specify a port for this instance.',
+        type: 'number',
+    })
+    .option('debug', {
+        alias: 'd',
+        description: 'Debug messages to console.',
+        type: 'boolean',
+    })
+    .help()
+    .alias('help', 'h')
+    .argv;
+
+if(argv.port) {
+  config.server.port = argv.port;
+}
+
+if(argv.debug) {
+  config.dispatcher.push({
+    type: 'console',
+    format: 'human'
+  });
 }
 
 /*
@@ -34,6 +67,9 @@ const consoleDispatch = function(data, bot) {
   console.log({data});
 };
 
+/*
+ *  MSSQL Dispatcher. Execute tables.sql and procedure.sql first.
+ */
 const mssqlDispatch = function(data, bot) {
   if(bot.format !== undefined && bot.format != 'raw') {
     let needle = codes.filter((item) => item.code == data.sia.code);
@@ -47,7 +83,8 @@ const mssqlDispatch = function(data, bot) {
     user: bot.user,
     password: bot.password,
     server: bot.server,
-    database: bot.database
+    database: bot.database,
+    port: bot.port?bot.port:1433
   };
   sql.connect(database)
   .then(pool => {
@@ -73,6 +110,9 @@ const mssqlDispatch = function(data, bot) {
 
 };
 
+/*
+ *  Send the results to each one of dispatcher configured.
+ */
 const dispatch = function(data) {
   if(config.dispatcher !== undefined) {
     config.dispatcher.forEach(bot => {
@@ -138,14 +178,23 @@ const crc16 = function(data) {
   return crc;
 };
 
+/*
+ *  Transform CRC to hex and 4 zero-padding string
+ */
 const crc16str = function(str) {
   return crc16(Buffer.from(str)).toString(16).toUpperCase().padStart(4, "0");
 };
 
+/*
+ *  Calculate the size of a message and transform to a 4 zero-padding string in hex
+ */
 const msgSize = function(str) {
   return str.length.toString(16).toUpperCase().padStart(4, "0");
 };
 
+/*
+ *  Transform socket data block to JSON object
+ */
 const parseRequest = function(data) {
   let csrTimestamp = moment.tz(new Date(), 'UTC');
   let peTimestamp;
@@ -211,6 +260,9 @@ const parseRequest = function(data) {
   return {chunk, msg, crc, size, type, id, account, prefix, receiver, sequence, block, sia, timestamp, response};
 };
 
+/*
+ *  Start a TCP server to dispatch every block of data received
+ */
 let server = net.createServer(function(socket) {
   socket.on('error', function(err) {
     console.error(err)
@@ -223,4 +275,7 @@ let server = net.createServer(function(socket) {
   });
 });
 
+/*
+ *  Start to listen in configured or argument passed port.
+ */
 server.listen(config.server.port);

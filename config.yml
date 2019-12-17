@@ -5,12 +5,10 @@ server:
     positive: 40
 dispatcher:
   -
-    type: 'console'
-    format: 'human'
-  -
     type: 'mssql'
     format: 'human'
     user: 'seg'
     password: 'Dnl123'
     database: 'Bb_datos'
     server: '190.13.132.109'
+    port: 1433
