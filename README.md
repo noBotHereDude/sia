@@ -2,7 +2,7 @@
 
 Permite registrar eventos de AJAX Security Systems y otros tipos de eventos SIA-DC-09 en una base de datos MSSQL.
 
-## Instalacion
+## Instalación
 
 ```bash
 git clone https://github.com/noBotHereDude/sia.git
@@ -11,7 +11,7 @@ npm i
 node server.js --help
 ```
 
-## Configuracion de ejemplo
+## Configuración de ejemplo
 
 ```yaml
 server:
@@ -30,7 +30,7 @@ dispatcher:
     port: 1433
 ```
 
-## Ejecucion
+## Ejecución
 
 ```bash
 # configuracion por defecto
@@ -41,4 +41,28 @@ node server.js --port 65000
 
 # depurar mensajes a consola
 node server.js --debug
+```
+
+## Despachadores
+
+Por el momento solo soporta despachadores tipo `mssql`. Puedes especificar cuantos despachadores necesites.
+
+```yaml
+dispatcher:
+  -
+    type: 'mssql'
+    format: 'human'
+    user: 'user'
+    password: '$3cr3t'
+    database: 'sia-events'
+    server: '127.0.0.1'
+    port: 1433
+  -
+    type: 'mssql'
+    format: 'human'
+    user: 'other'
+    password: '$3cr3t'
+    database: 'sia-events-backup'
+    server: '190.13.132.109'
+    port: 1433
 ```
